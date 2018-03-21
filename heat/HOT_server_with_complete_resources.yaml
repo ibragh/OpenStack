@@ -1,0 +1,218 @@
+heat_template_version: 2016-10-14
+description: my template
+
+parameters:
+  img_name:
+    type: string
+    default: myimage
+  img_location:
+    description: HTTP URL of image location
+    type: string
+  img_disk_format:
+    description: disk format [ami, ari, aki, vhd, vmdk, raw, qcow2, vdi, iso]
+    type: string
+  img_public:
+    description: Scope of image accessibility. Public / private
+    type: string
+    default: true
+  flav_name:
+    type: string
+  flav_disk:
+    description: size of local disk in GB
+    type: number
+    default: 12
+  flav_ram:
+    description: Flavor memory in MB
+    type: number
+    default: 2048
+  flav_vcpu:
+    description: Number of VCPUs for the flavor
+    type: number
+    default: 1
+  flav_public:
+    description: Scope of flavor accessibility. Public / private
+    type: boolean
+    default: true
+  keypair_name:
+    type: string
+  server_name:
+    type: string
+  internal_network_name:
+    description: 
+    type: string
+    default: private
+  internal_sub_name:
+    description:
+    type: string
+    default: private_sub
+  internal_sub_cidr:
+    description:
+    type: string
+    default: 192.168.2.0/24
+  internal_sub_ip_start:
+    description:
+    type: string
+    default: 192.168.2.10
+  internal_sub_ip_end:
+    description: 
+    type: string
+    default: 192.168.2.99
+  internal_sub_gatway:
+    description:
+    type: string
+    default: 192.168.2.1
+  external_network_name:
+    type: string
+    default: public
+  external_sub_name:
+    type: string
+    default: public_sub
+  router_name:
+    type: string
+    default: myrouter
+  sg_name:
+    type: string
+    default: mySG
+
+resources: 
+
+  myserver:
+    type: OS::Nova::Server
+    properties:
+      name: {get_param: server_name}
+      flavor: {get_resource: flavor}
+      image: {get_resource: image}
+      key_name: {get_resource: keypair}
+      networks:
+        - port: {get_resource: server_port}
+      user_data_format: RAW
+      user_data:
+      #whatever
+      #
+  external_network:
+    type: OS::Neutron::ProviderNet
+    properties:
+      name: {get_param: external_network_name}
+      network_type: flat
+      physical_network: physnet1
+      shared: true
+      router_external: true
+  
+  external_subnet:
+      type: OS::Neutron::Subnet
+      properties:
+        name: {get_param: external_sub_name}
+        cidr: 172.25.250.254/24
+        allocation_pools:
+        - {end: 172.25.250.99, start: 172.25.250.20}
+        gateway_ip: 172.25.250.254
+        ip_version: 4
+        network_id: {get_resource: external_network}
+  
+  internal_network:
+    type: OS::Neutron::Net
+    properties:
+      shared: true
+      name: {get_param: internal_network_name}
+
+  internal_subnet:
+      type: OS::Neutron::Subnet
+      properties:
+        name: {get_param: internal_sub_name}
+        cidr: {get_param: internal_sub_cidr}
+        allocation_pools:
+        - {end: {get_param: internal_sub_ip_end}, start: {get_param: internal_sub_ip_start} }
+        gateway_ip: {get_param: internal_sub_gatway}
+        ip_version: 4
+        network_id: {get_resource: internal_network}
+  
+  server_port:
+    type: OS::Neutron::Port
+    properties:
+      security_groups: [{get_resource: security_group}]
+      network: { get_resource: internal_network }
+      fixed_ips:
+        - subnet: { get_resource: internal_subnet}
+
+  myrouter:
+    type: OS::Neutron::Router
+    properties:
+      name: {get_param: router_name}
+      external_gateway_info:
+        network: {get_resource: external_network}
+
+  myrouter_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      subnet_id: {get_resource: internal_subnet}
+      router_id: {get_resource: myrouter}
+  
+  server_floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_resource: external_network }
+      port_id: { get_resource: server_port }
+
+  security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: {get_param: sg_name}
+      description: security group that allow http, https, ICMP, ssh
+      rules:
+        - protocol: TCP
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_max: 22
+          port_range_min: 22
+        - protocol: TCP
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_max: 80
+          port_range_min: 80
+        - protocol: TCP
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_max: 443
+          port_range_min: 443
+        - protocol: ICMP
+          remote_ip_prefix: 0.0.0.0/0
+
+  image:
+    type: OS::Glance::Image
+    properties:
+      name: {get_param: img_name}
+      container_format: bare
+      disk_format: {get_param: img_disk_format}
+      is_public: {get_param: img_public}
+      location: {get_param: img_location}
+
+  flavor:
+    type: OS::Nova::Flavor
+    properties:
+      name: {get_param: flav_name}
+      disk: {get_param: flav_disk}
+      name: {get_param: flav_name}
+      vcpus: {get_param: flav_vcpu}
+      ram: {get_param: flav_ram}
+      is_public: {get_param: flav_public}
+
+  keypair:
+    type: OS::Nova::KeyPair
+    properties:
+      name: {get_param: keypair_name}
+      save_private_key: true
+
+
+outputs:
+  server_name:
+    description: name of server
+    value: {get_attr: myserver, name }
+  
+  floating_IP:
+    description: floating IP address
+    value: {get_attr: [server_floating_ip, floating_ip_address] }
+
+  privatekey:
+    description: private key 
+    value: {get_attr: [keypair, private_key]}
+
+  publickey:
+    description: public key 
+    value: {get_attr: [keypair, public_key]}

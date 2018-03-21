@@ -1,0 +1,22 @@
+parameters:
+  img_name: myimage
+  img_location: http://workstation.lab.example.com/image1
+  img_disk_format: qcow2
+  img_public: true
+  flav_name: myflavor
+  flav_disk: 15
+  flav_ram: 2048
+  flav_vcpu: 1
+  flav_public: true
+  keypair_name: mykeypair
+  server_name: myinst
+  internal_network_name: private
+  internal_sub_name: private_sub
+  internal_sub_cidr: 192.168.2.0/24
+  internal_sub_ip_start: 192.168.2.10
+  internal_sub_ip_end: 192.168.2.99
+  internal_sub_gatway: 192.168.2.1
+  external_network_name: public
+  external_sub_name: public_sub
+  router_name: myrouter
+  sg_name: mySG
